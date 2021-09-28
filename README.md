@@ -18,3 +18,5 @@ git remote add origin git@github.com:IPSI-AU/tel-tools.git
 
 git pull origin master
 
+git branch --set-upstream-to=origin/master master
+
