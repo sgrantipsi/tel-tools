@@ -20,3 +20,6 @@ git pull origin master
 
 git branch --set-upstream-to=origin/master master
 
+git config --global user.name "Your Name"
+
+git config --global user.email "Your email"
