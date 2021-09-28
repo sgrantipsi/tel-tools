@@ -18,3 +18,7 @@ git remote add origin git@github.com:IPSI-AU/tel-tools.git
 
 git pull origin master
 
+git config --global user.name "Your Name"
+
+git config --global user.email "Your email"
+
