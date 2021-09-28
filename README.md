@@ -1,8 +1,8 @@
 # tel-tools
 ## Add repository in CentOs 7
-cp id_rsa.pub .ssh/id_rsa.pub
+cp id_rsa.pub ~/.ssh/id_rsa.pub
 
-eval `ssh-agent`
+eval \`ssh-agent\`
 
 ssh-add
 
