@@ -1,0 +1,83 @@
+#!/bin/bash
+REMOTE=https://github.com/pjsip/pjproject/archive/refs/tags/2.9.tar.gz
+DIR=pjproject-2.9
+PWD=$(pwd)
+CLASSPATH=$PWD/pjproject-2.9/pjsip-apps/src/swig/java/output
+
+echo
+echo "remove currently install pjproject in /lib64"
+yum remove -y pjproject
+ldconfig
+
+echo 
+echo "Installing curl.."
+yum install -y curl
+echo 
+echo "Installing wget.."
+yum install -y wget #allow to download pjproject package
+echo 
+echo "Installing unzip.."
+yum install -y unzip #allow to download pjproject package
+echo 
+echo "Installing Java JDK.."
+yum install -y java-1.8.0-openjdk-devel
+echo 
+echo "Installing SWIG/Python bindings.."
+yum install -y swig # allows python bindings for pjsua2
+
+# contains libasound-dev library, virtual sound for VM/server 
+# needs to be installed before pjproject compiles 
+echo
+echo "installing virtual sound device.."
+yum install -y alsa-lib
+yum install -y alsa-lib-devel
+
+
+echo 
+echo "Installing pjproject.."
+wget $REMOTE
+tar -xvf 2.9.tar.gz
+cd $DIR
+./configure --enable-shared
+make dep 
+make
+make install
+
+
+echo 
+echo "Installing Python PJSIP library.."
+cd pjsip-apps/src/swig
+make
+make install
+
+# java shared library is 
+# pjsip-apps/src/swig/java/output/libpjsua2.so
+# this seems to be different to the one stored in /usr/var/lib
+# ie, different file sizes. Use this to load from java code
+# java/class files are stored in /pjsip-apps/src/swig/java/output/pjsip/pjsua2/
+cd java
+make
+
+echo 
+echo "Configuring PJSUA2 shared libraries.."
+echo "/usr/local/lib" >>  /etc/ld.so.conf
+ldconfig -v
+
+
+# setup java environment
+cd $PWD
+rm -f classes
+ln -s $CLASSPATH classes
+echo "CLASSPATH=$PWD/classes" >> ~/.bash_profile
+echo "export CLASSPATH" >> ~/.bash_profile
+source ~/.bash_profile 
+
+echo "javac -d . -classpath $CLASSPATH ivr.java" > run_ivr
+
+echo  "java -Djava.library.path=$CLASSPATH -classpath $PWD:$CLASSPATH ivr" >> run_ivr 
+chmod a+x run_ivr
+
+echo "javac -d . -classpath $CLASSPATH caller.java" > run_caller
+
+echo  "java -Djava.library.path=$CLASSPATH -classpath $PWD:$CLASSPATH caller" >> run_caller 
+chmod a+x run_caller
