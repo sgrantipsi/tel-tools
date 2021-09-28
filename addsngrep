@@ -1,0 +1,11 @@
+#!/bin/bash
+# This is a handy tool to analyse SIP messages in real-time, no need to download pcap file. 
+# after install on CentOs7, run sngrep 
+
+REPOFILE=/etc/yum.repos.d/sngrep.repo
+touch $REPOFILE
+echo "[irontec]" > $REPOFILE
+echo "name=Irontec RPMs repository" >> $REPOFILE
+echo "baseurl=http://packages.irontec.com/centos/\$releasever/\$basearch/">> $REPOFILE
+rpm --import http://packages.irontec.com/public.key
+yum install sngrep
