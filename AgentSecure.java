@@ -11,6 +11,7 @@ public class AgentSecure {
  String startCaptureURI = "http://localhost:8080/startCapture";
  String stopCaptureURI = "http://localhost:8080/stopCapture";
  String showCaptureURI = "http://localhost:8080/showCapture"; 
+ String updateCaptureURI = "http://localhost:8080/updateCapture"; 
  Call call; 
 
  public static void main(String[] args){
@@ -71,6 +72,20 @@ public class AgentSecure {
 
  }
 
+ public CaptureResponse UpdateCapture(UpdateCaptureRequest captureRequest) throws IOException, InterruptedException{
+  String requestBody = new Gson().toJson(captureRequest);
+  HttpRequest request = HttpRequest.newBuilder()
+      .uri(URI.create(updateCaptureURI))
+      .header("Content-Type", "application/json")
+      .POST(BodyPublishers.ofString(requestBody))
+      .build();
+  HttpClient client = HttpClient.newHttpClient();
+  HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+  System.out.println(response.statusCode());
+  return new Gson().fromJson(response.body(), CaptureResponse.class);  
+
+ }
+
 }
 
 class Call{
@@ -110,6 +125,10 @@ class ShowCaptureRequest{
   String correlation_id;
   String username;
   String password;
+}
+
+class UpdateCaptureRequest extends ShowCaptureRequest{
+  String[] field;
 }
 
 class Response{
