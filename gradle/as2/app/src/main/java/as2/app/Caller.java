@@ -12,10 +12,55 @@ class ClientAccount extends Account {
 
 class OutboundCall extends Call {
     private String destination;
+    protected int startDelay;
+    protected int endDelay;
+    protected int dtmfDelay;
+    protected String dtmfs;
+    private CallOpParam callOp;
+    private SipHeader sipDirectionHeader;
+    private String directionHeader = "outbound";
+    private String correlationName = "X-Correlation-ID";
+    private String correlationId = "test-123";
+    private String signalMonitor = "";
+    private boolean wasSignalled = false;
 
+
+    public void doWait(){
+        synchronized(signalMonitor){
+         try {
+            signalMonitor.wait();
+         } catch(InterruptedException e){
+            System.out.println(e);
+         }
+        }
+    }
+
+    private void doNotify(){
+        synchronized(signalMonitor){
+          signalMonitor.notify();
+        }
+    }
+    
     public OutboundCall(Account acc, String destination) {
         super(acc);
         this.destination = destination;
+        callOp = new CallOpParam(true);
+
+        SipHeader sipDirectionHeader = new SipHeader();
+        sipDirectionHeader.setHName("X-IPSI-Direction");
+        sipDirectionHeader.setHValue(directionHeader);
+
+        SipHeader sipIdHeader = new SipHeader();
+        sipIdHeader.setHName(correlationName);
+        sipIdHeader.setHValue(correlationId);
+
+        SipHeaderVector sipHeaderVector = new SipHeaderVector();
+        sipHeaderVector.add(sipDirectionHeader);
+        sipHeaderVector.add(sipIdHeader);
+
+        SipTxOption sipTxOption = new SipTxOption();
+        sipTxOption.setHeaders(sipHeaderVector);
+        callOp.setTxOption(sipTxOption);
     }
 
     @Override
@@ -26,11 +71,12 @@ class OutboundCall extends Call {
             CallInfo callInfo = getInfo();
             CallMediaInfoVector medias = callInfo.getMedia();
             mediaSize = (int) medias.size(); 
+            System.out.println("....on call media state -----------------< ");
             for(int i = 0; i < mediaSize; i++){
               if(medias.get(i).getType() == pjmedia_type.PJMEDIA_TYPE_AUDIO &&
                 medias.get(i).getStatus() == pjsua_call_media_status.PJSUA_CALL_MEDIA_ACTIVE
               ){
-
+               sendDTMF();
               }
 
             }
@@ -73,29 +119,15 @@ class OutboundCall extends Call {
 	}
     }
 
-    public String execute(String dtmfs, int startDelay, int endDelay, int dtmfDelay) 
+    public String execute() 
         throws Exception{
-        String correlationId = "test-123";
-        CallOpParam callOp = new CallOpParam(true);
-
-        SipHeader sipDirectionHeader = new SipHeader();
-        sipDirectionHeader.setHName("X-IPSI-Direction");
-        sipDirectionHeader.setHValue("inbound");
-
-        SipHeader sipIdHeader = new SipHeader();
-        sipIdHeader.setHName("X-Correlation-ID");
-        sipIdHeader.setHValue(correlationId);
-
-        SipHeaderVector sipHeaderVector = new SipHeaderVector();
-        sipHeaderVector.add(sipDirectionHeader);
-        sipHeaderVector.add(sipIdHeader);
-
-        SipTxOption sipTxOption = new SipTxOption();
-        sipTxOption.setHeaders(sipHeaderVector);
-        callOp.setTxOption(sipTxOption);
 
         makeCall(destination, callOp);
-        Thread.sleep(startDelay);
+        return correlationId;
+
+    } 
+
+    private void sendDTMF() throws Exception{
         System.out.println("sending dtmf..");
         for(char dtmf : dtmfs.toCharArray()){
             dialDtmf(String.valueOf(dtmf));
@@ -104,9 +136,8 @@ class OutboundCall extends Call {
         dialDtmf("#");
         Thread.sleep(endDelay);
         hangup(callOp);
-        return correlationId;
-
-    } 
+        doNotify();
+    }
  
 }
 
@@ -119,12 +150,17 @@ public class Caller{
   private static int dtmfDelay = 500; //milliseconds
   private static int startDelay = 3000;
   private static int endDelay = 3000;
+  private static String secret = "secret";
+  private static String username = "username";
+  private static String password = "password";
+  private static String correlationId; 
   private static String destination = "sip:9999@192.168.56.8";
   private Endpoint endpoint;
   private EpConfig endpointConfig;
   private TransportConfig transportConfig;
   public ClientAccount account;
   private AccountConfig config;
+  public static String[] captureOrder = new String[]{"pan", "expiryDate", "cvv"};
 
   private void createEndpoint() throws Exception{
     endpoint = new Endpoint();
@@ -164,7 +200,21 @@ public class Caller{
     try {
         Caller caller = new Caller();
         OutboundCall call = new OutboundCall(caller.account, destination);
-        call.execute(dtmfs, startDelay, endDelay, dtmfDelay);
+        call.dtmfs = dtmfs;
+        call.dtmfDelay = dtmfDelay;
+        call.startDelay = startDelay;
+        call.endDelay = endDelay;
+        correlationId = call.execute(); //dial
+        AgentSecure as2 = new AgentSecure();
+        CaptureResponse captureResponse = as2.startCapture(correlationId, captureOrder, username, password, secret);
+        //Thread.sleep(startDelay);
+        call.doWait(); //wait for call to establish and send dtmf
+        String captureId = captureResponse.captureId;
+        CaptureResponse stopResonse = as2.stopCapture(captureId, username, password, secret);
+        CaptureResponse showResponse = as2.showCapture(captureId, username, password, secret);
+        System.out.println("#########################");
+        System.out.println(showResponse);
+        Thread.sleep(15000);
         caller.close();
 
     } catch (Exception e){

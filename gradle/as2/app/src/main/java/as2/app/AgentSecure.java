@@ -36,7 +36,6 @@ public class AgentSecure {
       .uri(URI.create(healthURI))
       .header("Content-Type", "application/json")
       .build();
-
  }
 
  public int healthCheck() throws IOException, InterruptedException{
@@ -52,7 +51,6 @@ public class AgentSecure {
   } catch(JWTCreationException exception){
     return "";
   }
-
  }
 
  public CaptureResponse startCapture(String correlationId, String[] captureOrder, String username, String password, String token) throws IOException, InterruptedException{
@@ -67,11 +65,9 @@ public class AgentSecure {
       .build();
 
   HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-  System.out.println("the response body is..");
+  System.out.println("the start capture response body is..");
   System.out.println(response.body());
   return new Gson().fromJson(response.body(), CaptureResponse.class);  
-
-
  }
 
  public CaptureResponse stopCapture(String captureId, String username, String password, String token) throws IOException, InterruptedException{
@@ -86,8 +82,6 @@ public class AgentSecure {
       .build();
   HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
   return new Gson().fromJson(response.body(), CaptureResponse.class);  
-
-
  }
 
  public CaptureResponse showCapture(String correlationId, String username, String password, String  token) throws IOException, InterruptedException{
@@ -121,7 +115,6 @@ public class AgentSecure {
  }
 
 }
-
 
 class CapturedField{
   String name;
@@ -161,7 +154,6 @@ class CaptureResponse{
 
 }
 
-
 class StopCaptureRequest{
   String captureId;
   String username;
@@ -174,7 +166,6 @@ class StopCaptureRequest{
   }
 }
 
-
 class UpdateCaptureRequest extends StopCaptureRequest{
   String[] field;
   public UpdateCaptureRequest(String correlationId, String[] field, String username, String password){
@@ -182,7 +173,6 @@ class UpdateCaptureRequest extends StopCaptureRequest{
     this.field = field;
   }
 }
-
 
 class CaptureRequest{
   String correlationId;
