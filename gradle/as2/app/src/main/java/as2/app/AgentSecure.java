@@ -1,4 +1,3 @@
-//package au.com.ipsi.agentsecure;
 package as2.app;
 import java.net.URI;
 import java.net.http.*;
@@ -39,7 +38,8 @@ public class AgentSecure {
  }
 
  public int healthCheck() throws IOException, InterruptedException{
-  HttpResponse<String> response = client.send(healthRequest, HttpResponse.BodyHandlers.ofString());
+  HttpResponse<String> response = client.send(healthRequest, 
+                                  HttpResponse.BodyHandlers.ofString());
   return response.statusCode();
  }
  
@@ -53,8 +53,11 @@ public class AgentSecure {
   }
  }
 
- public CaptureResponse startCapture(String correlationId, String[] captureOrder, String username, String password, String token) throws IOException, InterruptedException{
-  CaptureRequest captureRequest = new CaptureRequest(correlationId, captureOrder, username, password);
+ public CaptureResponse startCapture(String correlationId, String[] captureOrder, 
+                                     String username, String password, String token) 
+                                     throws IOException, InterruptedException{
+  CaptureRequest captureRequest = new CaptureRequest(correlationId, captureOrder, 
+                                  username, password);
   String requestBody = new Gson().toJson(captureRequest);
   String generatedToken = createToken(token);
   HttpRequest request = HttpRequest.newBuilder()
@@ -70,7 +73,9 @@ public class AgentSecure {
   return new Gson().fromJson(response.body(), CaptureResponse.class);  
  }
 
- public CaptureResponse stopCapture(String captureId, String username, String password, String token) throws IOException, InterruptedException{
+ public CaptureResponse stopCapture(String captureId, String username, 
+                                    String password, String token) 
+                                    throws IOException, InterruptedException{
   StopCaptureRequest stopCaptureRequest = new StopCaptureRequest(captureId, username, password);
   String requestBody = new Gson().toJson(stopCaptureRequest);
   String generatedToken = createToken(token);
@@ -84,7 +89,9 @@ public class AgentSecure {
   return new Gson().fromJson(response.body(), CaptureResponse.class);  
  }
 
- public CaptureResponse showCapture(String correlationId, String username, String password, String  token) throws IOException, InterruptedException{
+ public CaptureResponse showCapture(String correlationId, String username, 
+                                    String password, String  token) 
+                                    throws IOException, InterruptedException{
   StopCaptureRequest captureRequest = new StopCaptureRequest(correlationId, username, password);
   String requestBody = new Gson().toJson(captureRequest);
   String generatedToken = createToken(token);
@@ -96,11 +103,13 @@ public class AgentSecure {
       .build();
   HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
   return new Gson().fromJson(response.body(), CaptureResponse.class);  
-
  }
 
- public CaptureResponse UpdateCapture(String correlationId, String[] field, String username, String password, String token) throws IOException, InterruptedException{
-  UpdateCaptureRequest captureRequest = new UpdateCaptureRequest(correlationId, field, username, password);
+ public CaptureResponse UpdateCapture(String correlationId, String[] field, 
+                                      String username, String password, String token) 
+                                      throws IOException, InterruptedException{
+  UpdateCaptureRequest captureRequest = new UpdateCaptureRequest(
+                                        correlationId, field, username, password);
   String requestBody = new Gson().toJson(captureRequest);
   String generatedToken = createToken(token);
   HttpRequest request = HttpRequest.newBuilder()
@@ -111,9 +120,7 @@ public class AgentSecure {
       .build();
   HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
   return new Gson().fromJson(response.body(), CaptureResponse.class);  
-
  }
-
 }
 
 class CapturedField{
@@ -148,10 +155,10 @@ class CaptureResponse{
       for(CapturedField field: capturedFields){
         fields += field.toString();
       }
-      return String.format("captureId: %s, responsecode: %s, errors %s, capturedFields: %s", captureId, responseCode, errors, fields); 
+      return String.format("captureId: %s, responsecode: %s, errors %s, capturedFields: %s", 
+      captureId, responseCode, errors, fields); 
     }
   }
-
 }
 
 class StopCaptureRequest{
@@ -168,7 +175,8 @@ class StopCaptureRequest{
 
 class UpdateCaptureRequest extends StopCaptureRequest{
   String[] field;
-  public UpdateCaptureRequest(String correlationId, String[] field, String username, String password){
+  public UpdateCaptureRequest(String correlationId, String[] field, 
+                              String username, String password){
     super(correlationId, username, password);
     this.field = field;
   }
@@ -180,7 +188,8 @@ class CaptureRequest{
   String username;
   String password;
 
-  public CaptureRequest(String correlationId, String[] captureOrder, String username, String password){
+  public CaptureRequest(String correlationId, String[] captureOrder, 
+                        String username, String password){
     this.correlationId = correlationId;
     this.captureOrder = captureOrder;
     this.username = username;
@@ -197,6 +206,7 @@ class Response{
 
   @Override
   public String toString(){
-    return "User Id: " + userId + ", id: " + id + ", title: " + title + ", completed: " + completed; 
+    return "User Id: " + userId + ", id: " + id + ", title: " + 
+            title + ", completed: " + completed; 
   }
 }

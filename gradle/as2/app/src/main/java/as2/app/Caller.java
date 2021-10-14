@@ -7,7 +7,6 @@ class ClientAccount extends Account {
   public void onRegState(OnRegStateParam prm){
     System.out.println("*** One registration state: " + prm.getCode() + prm.getReason());
   }
-
 }
 
 class OutboundCall extends Call {
@@ -22,8 +21,6 @@ class OutboundCall extends Call {
     private String correlationName = "X-Correlation-ID";
     private String correlationId = "test-123";
     private String signalMonitor = "";
-    private boolean wasSignalled = false;
-
 
     public void doWait(){
         synchronized(signalMonitor){
@@ -206,7 +203,8 @@ public class Caller{
         call.endDelay = endDelay;
         correlationId = call.execute(); //dial
         AgentSecure as2 = new AgentSecure();
-        CaptureResponse captureResponse = as2.startCapture(correlationId, captureOrder, username, password, secret);
+        CaptureResponse captureResponse = as2.startCapture(correlationId, 
+                                          captureOrder, username, password, secret);
         //Thread.sleep(startDelay);
         call.doWait(); //wait for call to establish and send dtmf
         String captureId = captureResponse.captureId;
