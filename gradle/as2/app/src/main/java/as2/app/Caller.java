@@ -1,31 +1,100 @@
 package as2.app;
 import org.pjsip.pjsua2.*;
 import org.pjsip.pjsua2.Endpoint;
+import java.util.ArrayList;
 
 class ClientAccount extends Account {
+  private SignalLock lock;
+
   @Override
   public void onRegState(OnRegStateParam prm){
     System.out.println("*** One registration state: " + prm.getCode() + prm.getReason());
   }
+
+  @Override
+  public void onInstantMessage(OnInstantMessageParam msg){
+    System.out.println("CorrelationId: "   + msg.getMsgBody());
+    synchronized(lock){
+	    lock.message = msg.getMsgBody();
+	    System.out.println("Correlation ID is " + lock.message);
+	    lock.notify();
+            System.out.println("notified");
+    }
+  }
+
+  public void setLock(SignalLock lock){
+      this.lock = lock;
+  }
+
+  public String getCorrelationId(){
+     return this.lock.message;
+  }
 }
 
+class Request {
+  public String correlationName = "X-Correlation-Id";
+  public boolean capture = true;
+  public String[] captureOrder = new String[]{"pan", "expiryDate", "cvv"};
+  public String direction = "inbound"; 
+  public String[] dtmf = new String[]{"4111111111111111"};
+  public float dtmfDelaySeconds = 0.5f; 
+  public float startDelaySeconds = 0;
+  public float endDelaySeconds = 30;
+  public String apiUser = "username";
+  public String apiPassword = "password";
+  public boolean includeVoice = true;
+  public String extension = "9999";
+  public String secret = "secret";
+  public String server = "192.168.56.8";
+  public String sipUser = "testclient";
+  public String sipPassword = "password";
+}
+
+class SignalLock{
+  public String message;
+}
+
+
 class OutboundCall extends Call {
-    private String destination;
-    protected int startDelay;
-    protected int endDelay;
-    protected int dtmfDelay;
-    protected String dtmfs;
-    private CallOpParam callOp;
-    private SipHeader sipDirectionHeader;
-    private String directionHeader = "outbound";
-    private String correlationName = "X-Correlation-ID";
-    private String correlationId = "test-123";
-    private String signalMonitor = "";
+    private transient String server;
+    protected transient int startDelay;
+    protected transient int endDelay;
+    protected transient int dtmfDelay;
+    protected transient String[] dtmfs;
+    protected transient String[] captureOrder;
+    private transient CallOpParam callOp;
+    private transient SipHeader sipDirectionHeader;
+    private transient String directionHeader = "inbound";
+    private transient String correlationName = "X-Correlation-ID";
+    private transient SignalLock mediaLock = new SignalLock();
+    private transient String extension;
+    public transient AgentSecure as2; 
+    private transient SignalLock lock;
+
+    public transient String correlationIdOutbound; 
+    public transient String correlationIdInbound; 
+    public ArrayList<CaptureResponse> captures = new ArrayList<CaptureResponse>();
+    //jitter total 
+    public long meanJitter, maxJitter;
+    //jitter sent
+    public long meanJitterTx, maxJitterTx;
+    //jitter recieved
+    public long meanJitterRx; 
+    public long maxJitterRx;
+    //number of packets and bytes sent/received
+    public long packetsTx, packetsRx;
+    public long bytesTx, bytesRx;
+    public long meanRoundTripTime, maxRoundTripTime; //seconds 
+    public long packetLossTx, packetLossRx;
+
+    private String destination(){
+        return "sip:" + extension + "@" + server;
+    }
 
     public void doWait(){
-        synchronized(signalMonitor){
+        synchronized(mediaLock){
          try {
-            signalMonitor.wait();
+            mediaLock.wait();
          } catch(InterruptedException e){
             System.out.println(e);
          }
@@ -33,14 +102,20 @@ class OutboundCall extends Call {
     }
 
     private void doNotify(){
-        synchronized(signalMonitor){
-          signalMonitor.notify();
+        synchronized(mediaLock){
+          mediaLock.notify();
         }
     }
+
+    public void setLock(SignalLock lock){
+        this.lock = lock;
+    }
     
-    public OutboundCall(Account acc, String destination) {
+    public OutboundCall(Account acc, String server, String extension) {
         super(acc);
-        this.destination = destination;
+        this.server = server;
+        this.extension = extension;
+        correlationIdOutbound = "test-123";
         callOp = new CallOpParam(true);
 
         SipHeader sipDirectionHeader = new SipHeader();
@@ -49,7 +124,7 @@ class OutboundCall extends Call {
 
         SipHeader sipIdHeader = new SipHeader();
         sipIdHeader.setHName(correlationName);
-        sipIdHeader.setHValue(correlationId);
+        sipIdHeader.setHValue(correlationIdOutbound);
 
         SipHeaderVector sipHeaderVector = new SipHeaderVector();
         sipHeaderVector.add(sipDirectionHeader);
@@ -58,39 +133,58 @@ class OutboundCall extends Call {
         SipTxOption sipTxOption = new SipTxOption();
         sipTxOption.setHeaders(sipHeaderVector);
         callOp.setTxOption(sipTxOption);
+
     }
 
     @Override
-    public void onCallMediaState(OnCallMediaStateParam prm){
+    public void onCallMediaState(OnCallMediaStateParam prm) {
         pjsip_inv_state state;
         int mediaSize;
-        try{
-            CallInfo callInfo = getInfo();
-            CallMediaInfoVector medias = callInfo.getMedia();
-            mediaSize = (int) medias.size(); 
-            System.out.println("....on call media state -----------------< ");
-            for(int i = 0; i < mediaSize; i++){
-              if(medias.get(i).getType() == pjmedia_type.PJMEDIA_TYPE_AUDIO &&
-                medias.get(i).getStatus() == pjsua_call_media_status.PJSUA_CALL_MEDIA_ACTIVE
-              ){
-               sendDTMF();
-              }
 
+        synchronized(lock){
+	  //Thread.sleep(startDelay);
+	  System.out.println("Waiting for correlation id");
+          while(lock.message == null){
+	        try{
+	          lock.wait();
+		} catch (InterruptedException e){}
+          }
+       	  correlationIdInbound = lock.message;
+	  System.out.println("received correlation ID !: " + correlationIdInbound);
+        }
+
+
+        try{
+          CallInfo callInfo = getInfo();
+          CallMediaInfoVector medias = callInfo.getMedia();
+          mediaSize = (int) medias.size(); 
+          System.out.println("--> Sending DTMF");
+          for(int i = 0; i < mediaSize; i++){
+            if(medias.get(i).getType() == pjmedia_type.PJMEDIA_TYPE_AUDIO &&
+              medias.get(i).getStatus() == pjsua_call_media_status.PJSUA_CALL_MEDIA_ACTIVE
+            ){
+              sendDTMF();
             }
-        } catch (Exception e) {
-            System.out.println("!! failure getting call state");
-            return;
-	}
+          }
+
+          Thread.sleep(endDelay);
+          hangup(callOp);
+          collectStats();
+          doNotify();
+        } catch (Exception e){
+          System.out.println("!!error on media state 2: " + e);
+        }
     }
 
     @Override
     public void onCallState(OnCallStateParam prm){
         pjsip_inv_state state;
+
         try{
             CallInfo info = getInfo();
             state = info.getState();
         } catch (Exception e) {
-            System.out.println("!! failure getting call state");
+            System.out.println("!!! failure getting call state: " + e);
             return;
 	}
         if( state == pjsip_inv_state.PJSIP_INV_STATE_CALLING){
@@ -104,6 +198,7 @@ class OutboundCall extends Call {
 	}
         else if( state == pjsip_inv_state.PJSIP_INV_STATE_DISCONNECTED){
             System.out.println("--> call disconnected");
+            System.exit(0);
 	}
         else if( state == pjsip_inv_state.PJSIP_INV_STATE_EARLY){
             System.out.println("--> early call");
@@ -116,24 +211,80 @@ class OutboundCall extends Call {
 	}
     }
 
-    public String execute() 
+    public void start() 
         throws Exception{
-
-        makeCall(destination, callOp);
-        return correlationId;
-
+        makeCall(destination(), callOp);
     } 
 
+
+    private void collectStats() throws Exception{
+        //transmitted and received stats
+
+        StreamStat streamStat = getStreamStat(0);
+        RtcpStat rtcpStat = streamStat.getRtcp();
+        RtcpStreamStat txStats = rtcpStat.getTxStat();
+        RtcpStreamStat rxStats = rtcpStat.getRxStat(); 
+       
+        MathStat txJitter = txStats.getJitterUsec();
+        MathStat rxJitter = rxStats.getJitterUsec();
+
+        meanJitterRx = rxJitter.getMean();
+        meanJitterTx = txJitter.getMean();
+        maxJitterRx = rxJitter.getMax();
+        maxJitterTx = txJitter.getMax();
+
+        packetsTx = txStats.getLoss(); 
+        packetsRx = rxStats.getLoss();
+ 
+        MathStat roundTripTime = rtcpStat.getRttUsec();
+        meanRoundTripTime = roundTripTime.getMean();
+        maxRoundTripTime = roundTripTime.getMax(); 
+
+    }
+
+    private void sendDTMFString(String dtmfString) throws Exception{
+
+	   CaptureResponse captureResponse = as2.startCapture(correlationIdInbound, 
+				  captureOrder);
+	   System.out.println("start capture response" + captureResponse);
+	   for(char dtmf : dtmfString.toCharArray()){
+              System.out.println("Sending " + String.valueOf(dtmf));
+	      dialDtmf(String.valueOf(dtmf));
+	      Thread.sleep(dtmfDelay);
+	   }
+	   String captureId = captureResponse.captureId;
+	   /*
+	   try{
+	     captureResponse = as2.stopCapture(captureId);
+	     System.out.println("stop capture response " + captureResponse);
+	   } catch(Exception e){
+	     System.out.println("Stop capture error " + e);
+	     continue;
+	   }
+	   */
+	   try{
+	     captureResponse = as2.showCapture(captureId);
+             System.out.println("Correlation Id: " + correlationIdInbound);
+             System.out.println("Capture Id: " + captureId);
+	     System.out.println("Show capture: " + captureResponse);
+             Thread.sleep(300000);
+	     //captures.add(captureResponse);
+	   } catch(Exception e){
+	     System.out.println("Show capture error: " + e);
+	   }
+    }
+
     private void sendDTMF() throws Exception{
-        System.out.println("sending dtmf..");
-        for(char dtmf : dtmfs.toCharArray()){
-            dialDtmf(String.valueOf(dtmf));
-            Thread.sleep(dtmfDelay);
-        }
-        dialDtmf("#");
-        Thread.sleep(endDelay);
-        hangup(callOp);
-        doNotify();
+
+        try{
+            System.out.println("--> Sending DTMF");
+            for(String dtmfString : dtmfs){
+                sendDTMFString(dtmfString);
+            }
+            dialDtmf("#");
+        } catch (Exception e) {
+            System.out.println("!! Error: " + e);
+	}
     }
  
 }
@@ -143,21 +294,25 @@ public class Caller{
     System.loadLibrary("pjsua2");
     System.out.println("Library loaded xx");
   }
-  private static String dtmfs = "12345";
-  private static int dtmfDelay = 500; //milliseconds
-  private static int startDelay = 3000;
-  private static int endDelay = 3000;
-  private static String secret = "secret";
-  private static String username = "username";
-  private static String password = "password";
-  private static String correlationId; 
-  private static String destination = "sip:9999@192.168.56.8";
+  private static int port = 5060;
+  //private static String dtmfs = "12345";
+  //private static int dtmfDelay = 500; //milliseconds
+  //private static int startDelay = 3000;
+  //private static int endDelay = 3000;
+  //private static String secret = "secret";
+  //private static String username = "username";
+  //private static String password = "password";
+  //private static String correlationId; 
+  // private static String destination = "sip:9999@192.168.56.8";
+  //private static String server = "192.168.56.8";
+  //private static String extension = "9999";
+
   private Endpoint endpoint;
   private EpConfig endpointConfig;
   private TransportConfig transportConfig;
   public ClientAccount account;
   private AccountConfig config;
-  public static String[] captureOrder = new String[]{"pan", "expiryDate", "cvv"};
+  //public static String[] captureOrder = new String[]{"pan", "expiryDate", "cvv"};
 
   private void createEndpoint() throws Exception{
     endpoint = new Endpoint();
@@ -167,16 +322,16 @@ public class Caller{
     endpoint.libInit(endpointConfig);
     // Create SIP transport.
     TransportConfig transportConfig = new TransportConfig();
-    transportConfig.setPort(5060);
+    transportConfig.setPort(port);
     endpoint.transportCreate(pjsip_transport_type_e.PJSIP_TRANSPORT_UDP, transportConfig);
     endpoint.libStart();
   }
 
-  private void createAccount() throws Exception{
+  private void createAccount(String server, String user, String password) throws Exception{
     config = new AccountConfig();
-    config.setIdUri("sip:testclient@192.168.56.8");
-    config.getRegConfig().setRegistrarUri("sip:192.168.56.8");
-    AuthCredInfo cred = new AuthCredInfo("digest", "asterisk", "testclient", 0, "password");
+    config.setIdUri("sip:" + user + "@" + server);
+    config.getRegConfig().setRegistrarUri("sip:"+server);
+    AuthCredInfo cred = new AuthCredInfo("digest", "asterisk", user, 0, password);
     config.getSipConfig().getAuthCreds().add(cred);
     account = new ClientAccount();
     account.create(config);
@@ -188,31 +343,30 @@ public class Caller{
     endpoint.delete();
   }
 
-  public Caller() throws Exception{
+  public Caller(String server, String user, String password) throws Exception{
      createEndpoint();
-     createAccount();
+     createAccount(server, user, password);
   }
 
   public static void main(String argv[]){
     try {
-        Caller caller = new Caller();
-        OutboundCall call = new OutboundCall(caller.account, destination);
-        call.dtmfs = dtmfs;
-        call.dtmfDelay = dtmfDelay;
-        call.startDelay = startDelay;
-        call.endDelay = endDelay;
-        correlationId = call.execute(); //dial
-        AgentSecure as2 = new AgentSecure();
-        CaptureResponse captureResponse = as2.startCapture(correlationId, 
-                                          captureOrder, username, password, secret);
-        //Thread.sleep(startDelay);
-        call.doWait(); //wait for call to establish and send dtmf
-        String captureId = captureResponse.captureId;
-        CaptureResponse stopResonse = as2.stopCapture(captureId, username, password, secret);
-        CaptureResponse showResponse = as2.showCapture(captureId, username, password, secret);
-        System.out.println("#########################");
-        System.out.println(showResponse);
-        Thread.sleep(15000);
+        Request request = new Request();
+        SignalLock messageLock = new SignalLock();
+        Caller caller = new Caller(request.server, 
+                                   request.sipUser, request.sipPassword);
+        caller.account.setLock(messageLock);
+        OutboundCall call = new OutboundCall(caller.account, 
+                                             request.server, request.extension);
+        call.dtmfs = request.dtmf;
+        call.captureOrder = request.captureOrder;
+        call.dtmfDelay = Math.round(request.dtmfDelaySeconds) * 1000;
+        call.startDelay = Math.round(request.startDelaySeconds) * 1000;
+        call.endDelay = Math.round(request.endDelaySeconds) * 1000;
+        call.as2 = new AgentSecure(request.server, request.apiUser, 
+                                   request.apiPassword, request.secret);
+        call.setLock(messageLock);
+        call.start(); //dial
+        call.doWait(); //wait for call media to establish and proceed with call plan 
         caller.close();
 
     } catch (Exception e){

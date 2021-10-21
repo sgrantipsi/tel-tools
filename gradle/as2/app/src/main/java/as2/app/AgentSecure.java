@@ -11,17 +11,19 @@ import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.exceptions.JWTCreationException;
 
 public class AgentSecure {
- private static String server = "http://192.168.56.8:8080";
- private static String startCaptureURI = server + "/startCapture";
- private static String stopCaptureURI = server + "/stopCapture";
- private static String showCaptureURI = server + "/showCapture"; 
- private static String updateCaptureURI = server + "/updateCapture"; 
- private static String healthURI = server + "/health"; 
+ private String server; 
+ private static String port = "8080";
+ private String username, password, secret;
+ private String startCaptureURI = "/startCapture";
+ private String stopCaptureURI = "/stopCapture";
+ private String showCaptureURI = "/showCapture"; 
+ private String updateCaptureURI = "/updateCapture"; 
+ private String healthURI = "/health"; 
  HttpClient client;
  HttpRequest healthRequest;
 
  public static void main(String[] args){
-  AgentSecure as2 = new AgentSecure();
+  AgentSecure as2 = new AgentSecure("192.168.56.8","username","password","secret");
   try{ 
     // System.out.println(as2.healthCheck());
   } catch(Exception e){
@@ -29,10 +31,19 @@ public class AgentSecure {
   }
  }
 
- public AgentSecure(){
+ public String destination(){
+   return "http://" + server + ":" + port; 
+ }
+
+ public AgentSecure(String server, String username, 
+                    String password, String secret){
+  this.server = server;
+  this.username = username;
+  this.password = password;
+  this.secret = secret;
   client = HttpClient.newHttpClient();
   healthRequest = HttpRequest.newBuilder()
-      .uri(URI.create(healthURI))
+      .uri(URI.create(destination() + healthURI))
       .header("Content-Type", "application/json")
       .build();
  }
@@ -53,15 +64,14 @@ public class AgentSecure {
   }
  }
 
- public CaptureResponse startCapture(String correlationId, String[] captureOrder, 
-                                     String username, String password, String token) 
+ public CaptureResponse startCapture(String correlationId, String[] captureOrder) 
                                      throws IOException, InterruptedException{
   CaptureRequest captureRequest = new CaptureRequest(correlationId, captureOrder, 
                                   username, password);
   String requestBody = new Gson().toJson(captureRequest);
-  String generatedToken = createToken(token);
+  String generatedToken = createToken(secret);
   HttpRequest request = HttpRequest.newBuilder()
-      .uri(URI.create(startCaptureURI))
+      .uri(URI.create(destination() + startCaptureURI))
       .header("Content-Type", "application/json")
       .header("TOKEN", generatedToken)
       .POST(BodyPublishers.ofString(requestBody))
@@ -73,14 +83,14 @@ public class AgentSecure {
   return new Gson().fromJson(response.body(), CaptureResponse.class);  
  }
 
- public CaptureResponse stopCapture(String captureId, String username, 
-                                    String password, String token) 
+ public CaptureResponse stopCapture(String captureId) 
                                     throws IOException, InterruptedException{
   StopCaptureRequest stopCaptureRequest = new StopCaptureRequest(captureId, username, password);
   String requestBody = new Gson().toJson(stopCaptureRequest);
-  String generatedToken = createToken(token);
+  String generatedToken = createToken(secret);
+  System.out.println(destination() + stopCaptureURI);
   HttpRequest request = HttpRequest.newBuilder()
-      .uri(URI.create(stopCaptureURI))
+      .uri(URI.create(destination() + stopCaptureURI))
       .header("Content-Type", "application/json")
       .header("TOKEN", generatedToken)
       .POST(BodyPublishers.ofString(requestBody))
@@ -89,31 +99,37 @@ public class AgentSecure {
   return new Gson().fromJson(response.body(), CaptureResponse.class);  
  }
 
- public CaptureResponse showCapture(String correlationId, String username, 
-                                    String password, String  token) 
+ public CaptureResponse showCapture(String captureId) 
                                     throws IOException, InterruptedException{
-  StopCaptureRequest captureRequest = new StopCaptureRequest(correlationId, username, password);
+  StopCaptureRequest captureRequest = new StopCaptureRequest(captureId, username, password);
   String requestBody = new Gson().toJson(captureRequest);
-  String generatedToken = createToken(token);
+  String generatedToken = createToken(secret);
+  String destination = destination() + showCaptureURI;
+  System.out.println("show capture destination: " + destination);
+  System.out.println("captureId:" + captureId);
+  System.out.println("username:" + username);
+  System.out.println("password:" + password);
+  System.out.println("token:" + generatedToken);
   HttpRequest request = HttpRequest.newBuilder()
-      .uri(URI.create(showCaptureURI))
+      .uri(URI.create(destination))
       .header("Content-Type", "application/json")
       .header("TOKEN", generatedToken)
       .POST(BodyPublishers.ofString(requestBody))
       .build();
+  System.out.println("sending request");
   HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+  System.out.println("received request" + response.body());
   return new Gson().fromJson(response.body(), CaptureResponse.class);  
  }
 
- public CaptureResponse UpdateCapture(String correlationId, String[] field, 
-                                      String username, String password, String token) 
+ public CaptureResponse UpdateCapture(String correlationId, String[] field) 
                                       throws IOException, InterruptedException{
   UpdateCaptureRequest captureRequest = new UpdateCaptureRequest(
                                         correlationId, field, username, password);
   String requestBody = new Gson().toJson(captureRequest);
-  String generatedToken = createToken(token);
+  String generatedToken = createToken(secret);
   HttpRequest request = HttpRequest.newBuilder()
-      .uri(URI.create(updateCaptureURI))
+      .uri(URI.create(destination() + updateCaptureURI))
       .header("Content-Type", "application/json")
       .header("TOKEN", generatedToken)
       .POST(BodyPublishers.ofString(requestBody))
@@ -130,7 +146,7 @@ class CapturedField{
   
   @Override
   public String toString(){
-    return String.format("%s: %s, valid?%s",name, value, valid);
+    return String.format("%s: value: %s, valid?%s",name, value, valid);
   } 
 }
 
@@ -149,7 +165,7 @@ class CaptureResponse{
   @Override
   public String toString(){
     if(errors != null){
-      return responseCode; 
+      return responseCode + " " + errors[0]; 
     } else {
       String fields = "";
       for(CapturedField field: capturedFields){
