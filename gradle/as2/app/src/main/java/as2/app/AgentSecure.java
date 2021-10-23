@@ -10,6 +10,7 @@ import com.auth0.jwt.*;
 import com.auth0.jwt.algorithms.Algorithm; 
 import com.auth0.jwt.exceptions.JWTCreationException;
 
+
 public class AgentSecure {
  private String server; 
  private static String port = "8080";
@@ -21,15 +22,6 @@ public class AgentSecure {
  private String healthURI = "/health"; 
  HttpClient client;
  HttpRequest healthRequest;
-
- public static void main(String[] args){
-  AgentSecure as2 = new AgentSecure("192.168.56.8","username","password","secret");
-  try{ 
-    // System.out.println(as2.healthCheck());
-  } catch(Exception e){
-    System.out.println(e);
-  }
- }
 
  public String destination(){
    return "http://" + server + ":" + port; 
@@ -105,11 +97,6 @@ public class AgentSecure {
   String requestBody = new Gson().toJson(captureRequest);
   String generatedToken = createToken(secret);
   String destination = destination() + showCaptureURI;
-  System.out.println("show capture destination: " + destination);
-  System.out.println("captureId:" + captureId);
-  System.out.println("username:" + username);
-  System.out.println("password:" + password);
-  System.out.println("token:" + generatedToken);
   HttpRequest request = HttpRequest.newBuilder()
       .uri(URI.create(destination))
       .header("Content-Type", "application/json")
@@ -139,6 +126,7 @@ public class AgentSecure {
  }
 }
 
+
 class CapturedField{
   String name;
   Boolean valid;
@@ -150,10 +138,12 @@ class CapturedField{
   } 
 }
 
+
 class Cursor{
   String field;
   int position;  
 }
+
 
 class CaptureResponse{
   String captureId;
@@ -177,6 +167,7 @@ class CaptureResponse{
   }
 }
 
+
 class StopCaptureRequest{
   String captureId;
   String username;
@@ -189,6 +180,7 @@ class StopCaptureRequest{
   }
 }
 
+
 class UpdateCaptureRequest extends StopCaptureRequest{
   String[] field;
   public UpdateCaptureRequest(String correlationId, String[] field, 
@@ -197,6 +189,7 @@ class UpdateCaptureRequest extends StopCaptureRequest{
     this.field = field;
   }
 }
+
 
 class CaptureRequest{
   String correlationId;
