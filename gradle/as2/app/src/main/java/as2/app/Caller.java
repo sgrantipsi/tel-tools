@@ -2,6 +2,12 @@ package as2.app;
 import org.pjsip.pjsua2.*;
 import org.pjsip.pjsua2.Endpoint;
 import java.util.ArrayList;
+import com.google.gson.Gson;
+
+
+class SignalLock{
+  public String message;
+}
 
 class ClientAccount extends Account {
   private SignalLock lock;
@@ -31,6 +37,7 @@ class ClientAccount extends Account {
   }
 }
 
+
 class Request {
   public String correlationName = "X-Correlation-Id";
   public boolean capture = true;
@@ -39,7 +46,7 @@ class Request {
   public String[] dtmf = new String[]{"4111111111111111"};
   public float dtmfDelaySeconds = 0.5f; 
   public float startDelaySeconds = 0;
-  public float endDelaySeconds = 30;
+  public float endDelaySeconds = 0;
   public String apiUser = "username";
   public String apiPassword = "password";
   public boolean includeVoice = true;
@@ -48,10 +55,6 @@ class Request {
   public String server = "192.168.56.8";
   public String sipUser = "testclient";
   public String sipPassword = "password";
-}
-
-class SignalLock{
-  public String message;
 }
 
 
@@ -81,11 +84,18 @@ class OutboundCall extends Call {
     //jitter recieved
     public long meanJitterRx; 
     public long maxJitterRx;
+    public long maxRawJitterRx, meanRawJitterRx;
     //number of packets and bytes sent/received
     public long packetsTx, packetsRx;
     public long bytesTx, bytesRx;
     public long meanRoundTripTime, maxRoundTripTime; //seconds 
-    public long packetLossTx, packetLossRx;
+    public long lossTx, lossRx;
+    public long reorderTx, reorderRx;
+    public long discardTx, discardRx;
+    public long dupTx, dupRx;
+    public long meanLossPeriodRx, meanLossPeriodTx; 
+    public long maxLossPeriodRx, maxLossPeriodTx;
+
 
     private String destination(){
         return "sip:" + extension + "@" + server;
@@ -102,6 +112,7 @@ class OutboundCall extends Call {
     }
 
     private void doNotify(){
+        System.out.println("notifying...");
         synchronized(mediaLock){
           mediaLock.notify();
         }
@@ -153,7 +164,6 @@ class OutboundCall extends Call {
 	  System.out.println("received correlation ID !: " + correlationIdInbound);
         }
 
-
         try{
           CallInfo callInfo = getInfo();
           CallMediaInfoVector medias = callInfo.getMedia();
@@ -166,7 +176,6 @@ class OutboundCall extends Call {
               sendDTMF();
             }
           }
-
           Thread.sleep(endDelay);
           hangup(callOp);
           collectStats();
@@ -187,28 +196,28 @@ class OutboundCall extends Call {
             System.out.println("!!! failure getting call state: " + e);
             return;
 	}
-        if( state == pjsip_inv_state.PJSIP_INV_STATE_CALLING){
-            System.out.println("--> calling");
-	}
-        else if( state == pjsip_inv_state.PJSIP_INV_STATE_CONFIRMED){
-            System.out.println("--> call confirmed");
-	}
-        else if( state == pjsip_inv_state.PJSIP_INV_STATE_CONNECTING){
-            System.out.println("--> call connecting");
-	}
-        else if( state == pjsip_inv_state.PJSIP_INV_STATE_DISCONNECTED){
+        if(state == pjsip_inv_state.PJSIP_INV_STATE_CALLING){
+           System.out.println("--> calling");
+        }
+        else if(state == pjsip_inv_state.PJSIP_INV_STATE_CONFIRMED){
+           System.out.println("--> call confirmed");
+        }
+        else if(state == pjsip_inv_state.PJSIP_INV_STATE_CONNECTING){
+           System.out.println("--> call connecting");
+        }
+        else if(state == pjsip_inv_state.PJSIP_INV_STATE_DISCONNECTED){
             System.out.println("--> call disconnected");
-            System.exit(0);
-	}
-        else if( state == pjsip_inv_state.PJSIP_INV_STATE_EARLY){
+            //System.exit(0);
+        }
+        else if(state == pjsip_inv_state.PJSIP_INV_STATE_EARLY){
             System.out.println("--> early call");
-	}
-        else if( state == pjsip_inv_state.PJSIP_INV_STATE_INCOMING){
+        }
+        else if(state == pjsip_inv_state.PJSIP_INV_STATE_INCOMING){
             System.out.println("--> incoming call");
-	}
-        else if( state == pjsip_inv_state.PJSIP_INV_STATE_NULL){
+        }
+        else if(state == pjsip_inv_state.PJSIP_INV_STATE_NULL){
             System.out.println("-->null call");
-	}
+        }
     }
 
     public void start() 
@@ -216,34 +225,58 @@ class OutboundCall extends Call {
         makeCall(destination(), callOp);
     } 
 
-
     private void collectStats() throws Exception{
         //transmitted and received stats
-
         StreamStat streamStat = getStreamStat(0);
         RtcpStat rtcpStat = streamStat.getRtcp();
         RtcpStreamStat txStats = rtcpStat.getTxStat();
         RtcpStreamStat rxStats = rtcpStat.getRxStat(); 
        
+        //jitter
         MathStat txJitter = txStats.getJitterUsec();
         MathStat rxJitter = rxStats.getJitterUsec();
-
         meanJitterRx = rxJitter.getMean();
         meanJitterTx = txJitter.getMean();
         maxJitterRx = rxJitter.getMax();
         maxJitterTx = txJitter.getMax();
 
-        packetsTx = txStats.getLoss(); 
-        packetsRx = rxStats.getLoss();
- 
+        //lossPeriod
+        MathStat txLossPeriod = txStats.getLossPeriodUsec();
+        MathStat rxLossPeriod = rxStats.getLossPeriodUsec();
+        meanLossPeriodRx = rxLossPeriod.getMean();
+        meanLossPeriodTx = txLossPeriod.getMean();
+        maxLossPeriodRx = rxLossPeriod.getMax();
+        maxLossPeriodTx = txLossPeriod.getMax();
+
+        //loss
+        lossTx = txStats.getLoss(); 
+        lossRx = rxStats.getLoss();
+        //packets
+        packetsTx = txStats.getPkt();
+        packetsRx = rxStats.getPkt();
+        //bytes
+        bytesTx = txStats.getBytes();
+        bytesRx = rxStats.getBytes();
+        //reorder
+        reorderTx = txStats.getReorder();
+        reorderRx = txStats.getReorder();
+        //discard
+        discardTx = txStats.getDiscard();
+        discardRx = txStats.getDiscard();
+        //dup
+        dupTx = txStats.getDup();
+        dupRx = txStats.getDup();
+        //round trip 
         MathStat roundTripTime = rtcpStat.getRttUsec();
         meanRoundTripTime = roundTripTime.getMean();
         maxRoundTripTime = roundTripTime.getMax(); 
-
+        //raw Jitter
+        MathStat rawJitterStat = rtcpStat.getRxRawJitterUsec();
+        maxRawJitterRx = rawJitterStat.getMax(); 
+        meanRawJitterRx = rawJitterStat.getMean(); 
     }
 
     private void sendDTMFString(String dtmfString) throws Exception{
-
 	   CaptureResponse captureResponse = as2.startCapture(correlationIdInbound, 
 				  captureOrder);
 	   System.out.println("start capture response" + captureResponse);
@@ -267,15 +300,13 @@ class OutboundCall extends Call {
              System.out.println("Correlation Id: " + correlationIdInbound);
              System.out.println("Capture Id: " + captureId);
 	     System.out.println("Show capture: " + captureResponse);
-             Thread.sleep(300000);
-	     //captures.add(captureResponse);
+	     captures.add(captureResponse);
 	   } catch(Exception e){
 	     System.out.println("Show capture error: " + e);
 	   }
     }
 
     private void sendDTMF() throws Exception{
-
         try{
             System.out.println("--> Sending DTMF");
             for(String dtmfString : dtmfs){
@@ -286,33 +317,19 @@ class OutboundCall extends Call {
             System.out.println("!! Error: " + e);
 	}
     }
- 
 }
+
 
 public class Caller{
   static {
     System.loadLibrary("pjsua2");
-    System.out.println("Library loaded xx");
   }
   private static int port = 5060;
-  //private static String dtmfs = "12345";
-  //private static int dtmfDelay = 500; //milliseconds
-  //private static int startDelay = 3000;
-  //private static int endDelay = 3000;
-  //private static String secret = "secret";
-  //private static String username = "username";
-  //private static String password = "password";
-  //private static String correlationId; 
-  // private static String destination = "sip:9999@192.168.56.8";
-  //private static String server = "192.168.56.8";
-  //private static String extension = "9999";
-
   private Endpoint endpoint;
   private EpConfig endpointConfig;
   private TransportConfig transportConfig;
   public ClientAccount account;
   private AccountConfig config;
-  //public static String[] captureOrder = new String[]{"pan", "expiryDate", "cvv"};
 
   private void createEndpoint() throws Exception{
     endpoint = new Endpoint();
@@ -368,6 +385,9 @@ public class Caller{
         call.start(); //dial
         call.doWait(); //wait for call media to establish and proceed with call plan 
         caller.close();
+        String response = new Gson().toJson(call);
+        System.out.println(response);
+        Thread.sleep(15);
 
     } catch (Exception e){
         System.out.println(e);
