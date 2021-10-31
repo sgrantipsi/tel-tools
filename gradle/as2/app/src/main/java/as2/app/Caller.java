@@ -2,12 +2,20 @@ package as2.app;
 import org.pjsip.pjsua2.*;
 import org.pjsip.pjsua2.Endpoint;
 import com.google.gson.Gson;
-
+import io.javalin.*;
+import io.javalin.http.Handler;
+import io.javalin.core.validation.ValidationException;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.FileNotFoundException;
+import java.util.Properties;
 
 class SignalLock{
   public String message;
+  public boolean hangup = false;
 }
-
 
 
 class Request {
@@ -15,18 +23,35 @@ class Request {
   public boolean capture = true;
   public String[] captureOrder = new String[]{"pan", "expiryDate", "cvv"};
   public String direction = "inbound"; 
-  public String[] dtmf = new String[]{"4111111111111111"};
+  public String dtmf = "4111"; //"4111111111111111";
   public float dtmfDelaySeconds = 0.5f; 
   public float startDelaySeconds = 0;
   public float endDelaySeconds = 0;
+  public boolean includeVoice = true;
   public String apiUser = "username";
   public String apiPassword = "password";
-  public boolean includeVoice = true;
   public String extension = "9999";
   public String secret = "secret";
   public String server = "192.168.56.8";
   public String sipUser = "testclient";
   public String sipPassword = "password";
+  public String environment = "dev";
+
+
+  void setConnectionParams() throws FileNotFoundException, IOException{
+     //get env settings from config file from this.environment
+    Properties properties = new Properties();
+    String configFile = this.environment + ".config";
+    InputStream inputStream = new FileInputStream(new File(configFile));
+    properties.load(inputStream);
+    this.apiUser = properties.getProperty("apiUser");
+    this.apiPassword = properties.getProperty("apiPassword");
+    this.apiPassword = properties.getProperty("apiPassword");
+    this.server = properties.getProperty("server");
+    this.secret = properties.getProperty("secret");
+    this.sipUser = properties.getProperty("sipUser");
+    this.sipPassword = properties.getProperty("sipPassword");
+  }
 }
 
 
@@ -75,33 +100,43 @@ public class Caller{
      createAccount(server, user, password);
   }
 
-  public static void main(String argv[]){
+  public static void main(String[] args){
+     Javalin app = Javalin.create().start(7000);
+     app.post("/call", Caller.testCall);
+     app.exception(ValidationException.class, (e, ctx) -> {
+       ctx.json(e.getErrors()).status(400);
+     });
+  }
+
+  public static Handler testCall = ctx -> {
     try {
-        Request request = new Request();
-        SignalLock messageLock = new SignalLock();
+      
+        //Request request = new Request();
+        Request request = ctx.bodyAsClass(Request.class);
+        request.setConnectionParams();
         Caller caller = new Caller(request.server, 
                                    request.sipUser, request.sipPassword);
-        caller.account.setLock(messageLock);
         OutboundCall call = new OutboundCall(caller.account, 
                                              request.server, request.extension);
-        call.dtmfs = request.dtmf;
+        caller.account.setCall(call);
+        call.dtmf = request.dtmf;
         call.captureOrder = request.captureOrder;
         call.dtmfDelay = Math.round(request.dtmfDelaySeconds) * 1000;
         call.startDelay = Math.round(request.startDelaySeconds) * 1000;
         call.endDelay = Math.round(request.endDelaySeconds) * 1000;
         call.as2 = new AgentSecure(request.server, request.apiUser, 
                                    request.apiPassword, request.secret);
-        call.setLock(messageLock);
         call.start(); //dial
+        System.out.println("do await..");
         call.doWait(); //wait for call media to establish and proceed with call plan 
+        System.out.println("done");
         caller.close();
         String response = new Gson().toJson(call);
-        System.out.println(response);
-        Thread.sleep(15);
+        ctx.json(response);
 
     } catch (Exception e){
         System.out.println(e);
-        return;
+        ctx.json("{\"error\": " + e + "}");
     }
-  }
+  };
 }

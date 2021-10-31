@@ -4,25 +4,31 @@ import org.pjsip.pjsua2.*;
 
 class ClientAccount extends Account {
   private SignalLock lock;
+  private OutboundCall call;
 
   @Override
   public void onRegState(OnRegStateParam prm){
-    System.out.println("*** One registration state: " + prm.getCode() + prm.getReason());
+    System.out.println("*** registration state: " + prm.getCode() + prm.getReason());
   }
 
   @Override
   public void onInstantMessage(OnInstantMessageParam msg){
-    System.out.println("CorrelationId: "   + msg.getMsgBody());
-    synchronized(lock){
-	    lock.message = msg.getMsgBody();
-	    System.out.println("Correlation ID is " + lock.message);
-	    lock.notify();
-            System.out.println("notified");
+    String message = msg.getMsgBody();
+    if(message.equals("xxx")){
+      call.close();
+    } else { 
+     call.setInboundCorrelationId(message);
+     call.sendDTMF();
     }
+    
   }
 
   public void setLock(SignalLock lock){
       this.lock = lock;
+  }
+
+  public void setCall(OutboundCall call){
+      this.call = call;
   }
 
   public String getCorrelationId(){
