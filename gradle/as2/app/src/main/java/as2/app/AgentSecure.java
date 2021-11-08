@@ -13,7 +13,7 @@ import com.auth0.jwt.exceptions.JWTCreationException;
 
 public class AgentSecure {
  private String server; 
- private static String port = "8080";
+ private static String port = "80";
  private String username, password, secret;
  private String startCaptureURI = "/startCapture";
  private String stopCaptureURI = "/stopCapture";
@@ -24,7 +24,7 @@ public class AgentSecure {
  HttpRequest healthRequest;
 
  public String destination(){
-   return "http://" + server + ":" + port; 
+   return "http://" + server + ":" + port + "/v2"; 
  }
 
  public AgentSecure(String server, String username, 
