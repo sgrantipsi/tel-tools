@@ -21,10 +21,10 @@ class ClientAccount extends Account {
      CallInfo callinfo;
      try {
       callinfo = this.call.getInfo();
+      System.out.println("Call ID before sending DTMF : " + callinfo.getCallIdString());
      } catch (Exception e) {
       System.out.println("!! Expcetion Call info : " + e);
      }
-     System.out.println("Call ID before sending DTMF : " + callinfo.getCallIdString());
      call.sendDTMF();
     }
     
