@@ -18,8 +18,9 @@ class ClientAccount extends Account {
       call.close();
     } else { 
      call.setInboundCorrelationId(message);
+     Callinfo callinfo;
      try {
-      CallInfo callinfo = this.call.getInfo();
+      callinfo = this.call.getInfo();
      } catch (Exception e) {
       System.out.println("!! Expcetion Call info : " + e);
      }
