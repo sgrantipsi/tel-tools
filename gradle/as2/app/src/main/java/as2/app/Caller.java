@@ -145,6 +145,7 @@ public class Caller{
         OutboundCall call = new OutboundCall(caller.account, 
                                              request.sipServer, request.extension);
         caller.account.setCall(call);
+        System.out.println("Call ID when the call is set" + call.getInfo().getCallIdString());
         call.dtmf = request.dtmf;
         call.captureOrder = request.captureOrder;
         call.dtmfDelay = Math.round(request.dtmfDelaySeconds) * 1000;
