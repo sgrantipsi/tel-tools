@@ -18,7 +18,11 @@ class ClientAccount extends Account {
       call.close();
     } else { 
      call.setInboundCorrelationId(message);
-     CallInfo callinfo = this.call.getInfo();
+     try {
+      CallInfo callinfo = this.call.getInfo();
+     } catch (Exception e) {
+      System.out.println("!! Expcetion Call info : " + e);
+     }
      System.out.println("Call ID before sending DTMF : " + callinfo.getCallIdString());
      call.sendDTMF();
     }
