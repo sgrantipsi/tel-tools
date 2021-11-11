@@ -1,6 +1,7 @@
 package as2.app;
 import java.util.ArrayList;
 import org.pjsip.pjsua2.*;
+import java.util.UUID;
 
 
 class OutboundCall extends Call {
@@ -20,8 +21,9 @@ class OutboundCall extends Call {
     private transient CallOpParam callOp;
     private transient SipHeader sipDirectionHeader;
 
-    public transient String correlationIdOutbound; 
-    public transient String correlationIdInbound; 
+    //public transient String correlationIdOutbound; 
+    //public transient String correlationIdInbound; 
+    public transient String correlationId;
     public CaptureResponse capture; 
     //jitter total 
     public long meanJitter, maxJitter;
@@ -70,7 +72,7 @@ class OutboundCall extends Call {
         super(acc);
         this.server = server;
         this.extension = extension;
-        correlationIdOutbound = "test-123";
+        correlationId = UUID.randomUUID().toString();
         callOp = new CallOpParam(true);
 
         SipHeader sipDirectionHeader = new SipHeader();
@@ -79,7 +81,7 @@ class OutboundCall extends Call {
 
         SipHeader sipIdHeader = new SipHeader();
         sipIdHeader.setHName(correlationName);
-        sipIdHeader.setHValue(correlationIdOutbound);
+        sipIdHeader.setHValue(correlationId);
 
         SipHeaderVector sipHeaderVector = new SipHeaderVector();
         sipHeaderVector.add(sipDirectionHeader);
@@ -90,8 +92,7 @@ class OutboundCall extends Call {
         callOp.setTxOption(sipTxOption);
         callLock = new SignalLock();
     }
-
-    /*
+    
     @Override
     public void onCallMediaState(OnCallMediaStateParam prm) {
         pjsip_inv_state state;
@@ -104,42 +105,41 @@ class OutboundCall extends Call {
           System.out.println("--> Sending DTMF");
           for(int i = 0; i < mediaSize; i++){
             if(medias.get(i).getType() == pjmedia_type.PJMEDIA_TYPE_AUDIO &&
-              medias.get(i).getStatus() == pjsua_call_media_status.PJSUA_CALL_MEDIA_ACTIVE
-            ){
-              //sendDTMF();
+              medias.get(i).getStatus() == pjsua_call_media_status.PJSUA_CALL_MEDIA_ACTIVE){
+              sendDTMF();
             }
-          }
+	  }
         } catch (Exception e){
           System.out.println(e);
         }
-    }
-    */
-
-    public void setInboundCorrelationId(String correlationId){
-       correlationIdInbound = correlationId;
+	close();
     }
 
-    public void close(){
+
+     void close(){
         try {
           hangup(callOp);
           collectStats();
           doNotify();
         } catch(Exception e){
-          System.out.println("Error closing call");
+          System.out.println("!!Error closing call");
         }
     }
 
     @Override
     public void onCallState(OnCallStateParam prm){
         pjsip_inv_state state;
+	CallInfo info;
 
+        /*	
         try{
-            CallInfo info = getInfo();
+            info = getInfo();
             state = info.getState();
         } catch (Exception e) {
             System.out.println("!!! failure getting call state: " + e);
             return;
 	}
+	correlationId = info.getCallIdString();
         if(state == pjsip_inv_state.PJSIP_INV_STATE_CALLING){
            System.out.println("--> calling");
         }
@@ -161,6 +161,7 @@ class OutboundCall extends Call {
         else if(state == pjsip_inv_state.PJSIP_INV_STATE_NULL){
             System.out.println("-->null call");
         }
+	*/
     }
 
     public void start() 
@@ -220,7 +221,7 @@ class OutboundCall extends Call {
     }
 
     private void sendDTMFString(String dtmfString) throws Exception{
-	   CaptureResponse captureResponse = as2.startCapture(correlationIdInbound, 
+	   CaptureResponse captureResponse = as2.startCapture(correlationId, 
 				  captureOrder);
 	   for(char dtmf : dtmfString.toCharArray()){
               System.out.println("Sending " + String.valueOf(dtmf));
@@ -247,5 +248,4 @@ class OutboundCall extends Call {
 	}
     }
 }
-
 

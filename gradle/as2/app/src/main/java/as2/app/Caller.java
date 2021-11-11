@@ -15,7 +15,6 @@ import java.util.UUID;
 
 class SignalLock{
   public String message;
-  public boolean hangup = false;
 }
 
 
@@ -32,7 +31,7 @@ class Request {
   public String apiServer = "192.168.56.8";
   public String apiUser = "username";
   public String apiPassword = "password";
-  public String extension = "9999";
+  public String extension = "testcall";
   public String secret = "secret";
   public String sipServer = "192.168.56.8";
   public String sipUser = "testclient";
@@ -136,7 +135,8 @@ public class Caller{
 
   public static Handler testCall = ctx -> {
     try {
-        endpoint.libRegisterThread("mythread");
+        String threadId = UUID.randomUUID().toString();
+        endpoint.libRegisterThread(threadId);
         //Request request = new Request();
         Request request = ctx.bodyAsClass(Request.class);
         request.setConnectionParams();
@@ -144,8 +144,6 @@ public class Caller{
                                    request.sipUser, request.sipPassword);
         OutboundCall call = new OutboundCall(caller.account, 
                                              request.sipServer, request.extension);
-        caller.account.setCall(call);
-        System.out.println("Call ID when the call is set" + call.getInfo().getCallIdString());
         call.dtmf = request.dtmf;
         call.captureOrder = request.captureOrder;
         call.dtmfDelay = Math.round(request.dtmfDelaySeconds) * 1000;
